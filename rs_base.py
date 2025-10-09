@@ -105,6 +105,43 @@ def train_hmm_with_sorted_states(data, n_components=2, random_state=42, covarian
     return model, remapped, sorted_transmat, sorted_means, state_counts
 
 
+def save_transition_matrix_analysis(transmat, means, counts, N, K, filename_prefix="transition_analysis"):
+    """
+    Save transition matrix analysis to files for further examination.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Save transition matrix
+    transmat_df = pd.DataFrame(transmat, 
+                              columns=[f"To_State_{i}" for i in range(K)],
+                              index=[f"From_State_{i}" for i in range(K)])
+    transmat_df.to_csv(f"{filename_prefix}_N{N}_K{K}_{timestamp}.csv")
+    
+    # Save summary statistics
+    summary = {
+        "N": N,
+        "K": K,
+        "State_Means": means.flatten().tolist() if hasattr(means, 'flatten') else means,
+        "State_Counts": counts.tolist() if hasattr(counts, 'tolist') else counts,
+        "Stationary_Distribution": None
+    }
+    
+    try:
+        # Compute stationary distribution
+        eigenvals, eigenvecs = np.linalg.eig(transmat.T)
+        stationary = eigenvecs[:, 0].real
+        stationary = stationary / np.sum(stationary)
+        summary["Stationary_Distribution"] = stationary.tolist()
+    except:
+        summary["Stationary_Distribution"] = "Could not compute"
+    
+    summary_df = pd.DataFrame([summary])
+    summary_df.to_csv(f"{filename_prefix}_summary_N{N}_K{K}_{timestamp}.csv", index=False)
+    
+    print(f"Transition matrix analysis saved to files with prefix: {filename_prefix}_N{N}_K{K}_{timestamp}")
+    return transmat_df, summary_df
+
+
 # ============================ demand generators ============================
 
 from scipy.special import gamma as sp_gamma
@@ -609,9 +646,22 @@ if __name__ == "__main__":
                     if K > 1:
                         # Train HMM on labels (1-D)
                         Labels = labels.values.reshape(len(labels), 1)
-                        model, _, _, _, _ = train_hmm_with_sorted_states(
+                        model, remapped_states, sorted_transmat, sorted_means, state_counts = train_hmm_with_sorted_states(
                             Labels, n_components=K, random_state=random_state, covariance_type='full', n_iter=100
                         )
+                        
+                        # Display the learned transition matrix
+                        print(f"\n=== Learned Transition Matrix for N={N}, K={K} ===")
+                        print("Transition Matrix (sorted by state means):")
+                        print(f"Shape: {sorted_transmat.shape}")
+                        print(sorted_transmat)
+                        print(f"\nState means: {sorted_means.flatten()}")
+                        print(f"State counts: {state_counts}")
+                        print(f"Stationary distribution: {np.linalg.eig(sorted_transmat.T)[1][:, 0].real / np.sum(np.linalg.eig(sorted_transmat.T)[1][:, 0].real)}")
+                        print("=" * 60)
+                        
+                        # Save transition matrix analysis
+                        save_transition_matrix_analysis(sorted_transmat, sorted_means, state_counts, N, K)
                         state_samples_dict = {k: [] for k in range(K)}
                         for i, st in enumerate(labels):
                             state_samples_dict[int(st)].append(data[i])
@@ -659,9 +709,18 @@ if __name__ == "__main__":
 
                         if K > 1:
                             train_labels = labels.iloc[sel_cols].values.reshape(-1, 1)
-                            model_cv, *_ = train_hmm_with_sorted_states(
+                            model_cv, remapped_cv, transmat_cv, means_cv, counts_cv = train_hmm_with_sorted_states(
                                 train_labels, n_components=K, random_state=random_state, covariance_type='full', n_iter=100
                             )
+                            
+                            # Display CV transition matrix
+                            print(f"\n--- CV Fold {k} Transition Matrix ---")
+                            print(f"Training samples: {len(sel_cols)}")
+                            print("CV Transition Matrix:")
+                            print(transmat_cv)
+                            print(f"CV State means: {means_cv.flatten()}")
+                            print(f"CV State counts: {counts_cv}")
+                            print("-" * 40)
                         # build state-indexed training frames
                         train_input_demand = {}
                         if K > 1:
