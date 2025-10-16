@@ -686,7 +686,7 @@ if __name__ == "__main__":
                         state_frequencies = np.array([1.0])  # only one regime
 
                     # ---------- Cross-validate epsilon per state ----------
-                    list_epsilon = [0, 30, 60]
+                    list_epsilon = [10, 25, 50]
                     # All K-dimensional epsilon combos
                     from itertools import product as _prod
                     eps_grid = list(_prod(*([list_epsilon] * K)))
